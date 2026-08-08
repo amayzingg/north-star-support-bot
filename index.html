@@ -353,7 +353,11 @@ const INTENTS = {
     [/\b(delivery|shipping) (time|options?)\b/, 4],
     [/\bexpedited?\b/, 3],
     [/\bhow long does (shipping|delivery) take\b/, 4],
-    [/\bshipping\b/, 1],
+    [/\bshipping\b/, 2],
+  ],
+  bot_identity: [
+    [/\bare you (a |an )?(bot|robot|ai|human|real person|real)\b/, 9],
+    [/\bam i (talking|chatting|speaking) (to|with) a (bot|robot|human|real person)\b/, 9],
   ],
   main_menu: [
     [/\b(main )?menu\b/, 4],
@@ -550,10 +554,12 @@ function shareShippingInfo() {
   askAnythingElse();
 }
 
-function startRecommendation() {
+function startRecommendation(seedText) {
   state = 'RECO_Q1';
   fallbackStreak = 0;
   recoContext = null;
+  /* "recommend a tent" already answers the first question — skip straight to Q2. */
+  if (seedText && handleRecoQ1(seedText)) return;
   say('Fun — let’s find you the right gear! \u{1F3D5} What kind of adventure are you gearing up for?');
   showChips(['Camping', 'Hiking', 'Outdoor apparel']);
 }
@@ -664,13 +670,19 @@ function runIntent(intent, rawText) {
       return true;
     }
     case 'returns':        startReturns(); return true;
+    case 'bot_identity':
+      fallbackStreak = 0;
+      state = 'MAIN_MENU';
+      say('I’m a friendly bot! \u{2B50} But a real human is just a tap away if you’d prefer one.');
+      showChips(['Talk to a live agent', 'Back to menu']);
+      return true;
     case 'cancel_order':
       fallbackStreak = 0;
       state = 'MAIN_MENU';
       say('I’m not able to cancel orders myself — but a live agent can sort that out for you right away.');
       showChips(['Talk to a live agent', 'Back to menu']);
       return true;
-    case 'recommendation': startRecommendation(); return true;
+    case 'recommendation': startRecommendation(rawText); return true;
     case 'human_agent':    startLiveAgent(); return true;
     case 'shipping_info':  shareShippingInfo(); return true;
     case 'main_menu':      fallbackStreak = 0; clearChips(); showMainMenu(); return true;
@@ -712,6 +724,13 @@ function process(rawText) {
       const nums = extractOrderNumbers(text);
       if (nums.length) { fallbackStreak = 0; lookUpOrders(nums); return; }
       if (/try another/i.test(text)) { startOrderTracking(); return; }
+      if (/\b(lost|forgot|don'?t know|do not know|can'?t find|cannot find|no idea|not sure)\b/i.test(text)) {
+        fallbackStreak = 0;
+        state = 'MAIN_MENU';
+        say('No worries — it’s on your order confirmation email. If you can’t track it down, a live agent can look it up for you. \u{1F50D}');
+        showChips(['Talk to a live agent', 'Back to menu']);
+        return;
+      }
       if (intent && runIntent(intent, text)) return;
       say('I just need the order number — it’s the digits on your confirmation email, like #111.');
       showChips(['Back to menu']);
@@ -802,7 +821,7 @@ function handleBurst(msgs) {
   /* At most one interactive flow can follow the combined answer. */
   if (substantive.includes('human_agent')) { startLiveAgent(); return; }
   if (substantive.includes('cancel_order')) { runIntent('cancel_order', joined); return; }
-  if (substantive.includes('recommendation')) { startRecommendation(); return; }
+  if (substantive.includes('recommendation')) { startRecommendation(joined.toLowerCase()); return; }
   if (!nums.length && substantive.includes('order_tracking')) { startOrderTracking(); return; }
   if (parts.length) { askAnythingElse(); return; }
   process(joined);
