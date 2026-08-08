@@ -9,6 +9,10 @@ Accelerator simulated project.
 
 ## 🚀 How to test (zero setup)
 
+**Fastest:** open the live demo → **https://amayzingg.github.io/north-star-support-bot/**
+
+Or run it locally:
+
 1. Download or clone this repository.
 2. Open **`index.html`** in any modern browser (double-click it).
 
@@ -16,7 +20,7 @@ That's it. No API keys, no accounts, no subscriptions, no build steps, no intern
 connection required — the entire chatbot is a single self-contained HTML file.
 
 ```bash
-git clone https://github.com/<repo-owner>/north-star-support-bot.git
+git clone https://github.com/amayzingg/north-star-support-bot.git
 ```
 
 ## 💬 What it does
