@@ -56,7 +56,9 @@ Everything lives in [`index.html`](index.html) — plain HTML/CSS/JS, no librari
   live agent, shipping info, greetings, menu navigation, yes/no). The highest-scoring
   intent wins, so phrasing variations like *"Where is my order?"*, *"track my
   package"*, and *"has my order shipped"* all route correctly. Order numbers are
-  detected anywhere in a message ("it's #222" works without being asked).
+  detected anywhere in a message ("it's #222" works without being asked) — including
+  several at once: *"I made order 111 and my friend did order 222, what happened to
+  them?"* gets a combined status rundown.
 - **Guided state machine** — conversation flows (order lookup, the 2-question
   recommendation wizard, the delivered-order follow-up, live-agent mode) are explicit
   states. Free-typed intents can interrupt a flow at any point, and every resolved

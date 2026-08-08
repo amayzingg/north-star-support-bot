@@ -274,9 +274,9 @@
 /* ---------- Provided business data (used exactly as specified) ---------- */
 
 const ORDERS = {
-  '111': { status: 'Shipped', detail: 'Good news — order #111 has shipped and is arriving tomorrow! \u{1F69A}' },
-  '222': { status: 'Processing', detail: 'Order #222 is currently processing and ships in 24 hours. It’ll be on the trail to you soon!' },
-  '333': { status: 'Delivered', detail: 'Order #333 shows as delivered. \u{1F4E6}' },
+  '111': { short: 'Shipped — arriving tomorrow \u{1F69A}', detail: 'Good news — order #111 has shipped and is arriving tomorrow! \u{1F69A}' },
+  '222': { short: 'Processing — ships in 24 hours', detail: 'Order #222 is currently processing and ships in 24 hours. It’ll be on the trail to you soon!' },
+  '333': { short: 'Delivered \u{1F4E6}', detail: 'Order #333 shows as delivered. \u{1F4E6}' },
 };
 
 const RETURN_POLICY =
@@ -299,6 +299,9 @@ const SHIPPING_INFO =
 const INTENTS = {
   order_tracking: [
     [/\bwhere('?s| is)? my (order|package|parcel|delivery|stuff)\b/, 3],
+    [/\bwhat('?s| is)?.{0,24}happen(ed|ing|d)?\b/, 2],
+    [/\b(made|placed|did|submitted) (an? )?order/, 3],
+    [/\border(s)? ?#? ?\d/, 3],
     [/\btrack(ing)?\b/, 2],
     [/\border (status|number)\b/, 3],
     [/\bstatus of my (order|package|parcel)\b/, 3],
@@ -380,10 +383,14 @@ function detectIntent(text) {
   return bestScore >= 2 ? best : null;
 }
 
-/* Pull an order number out of free text, e.g. "it's #222" or "order 111". */
+/* Pull every order number out of free text, e.g. "orders 111 and #222". */
+function extractOrderNumbers(text) {
+  const matches = text.match(/#?\d{1,10}\b/g) || [];
+  return [...new Set(matches.map(m => m.replace('#', '')))];
+}
+
 function extractOrderNumber(text) {
-  const m = text.match(/#?(\d{1,10})\b/);
-  return m ? m[1] : null;
+  return extractOrderNumbers(text)[0] || null;
 }
 
 /* ---------- Conversation state ---------- */
@@ -495,6 +502,21 @@ function lookUpOrder(num) {
   } else {
     askAnythingElse();
   }
+}
+
+/* Several order numbers in one message get a combined status rundown. */
+function lookUpOrders(nums) {
+  if (nums.length === 1) { lookUpOrder(nums[0]); return; }
+  const lines = nums.map(n =>
+    '• #' + n + ' — ' + (ORDERS[n] ? ORDERS[n].short : 'no match, that looks like an invalid order number \u{1F9ED}'));
+  say('Here’s the latest on those orders:\n' + lines.join('\n'));
+  if (nums.some(n => !ORDERS[n])) {
+    say('For any I couldn’t find, double-check the number on the confirmation email — or I can connect you with a live agent.');
+  }
+  if (nums.includes('333')) {
+    say('And since #333 shows as delivered — just let me know if anything didn’t arrive in good shape.');
+  }
+  askAnythingElse();
 }
 
 function startReturns() {
@@ -618,8 +640,8 @@ function fallback() {
 function runIntent(intent, rawText) {
   switch (intent) {
     case 'order_tracking': {
-      const num = extractOrderNumber(rawText);
-      if (num) { fallbackStreak = 0; lookUpOrder(num); }
+      const nums = extractOrderNumbers(rawText);
+      if (nums.length) { fallbackStreak = 0; lookUpOrders(nums); }
       else startOrderTracking();
       return true;
     }
@@ -663,8 +685,8 @@ function process(rawText) {
   /* --- State-specific handling first (guided flow) --- */
   switch (state) {
     case 'ORDER_AWAIT_NUMBER': {
-      const num = extractOrderNumber(text);
-      if (num) { fallbackStreak = 0; lookUpOrder(num); return; }
+      const nums = extractOrderNumbers(text);
+      if (nums.length) { fallbackStreak = 0; lookUpOrders(nums); return; }
       if (/try another/i.test(text)) { startOrderTracking(); return; }
       if (intent && runIntent(intent, text)) return;
       say('I just need the order number — it’s the digits on your confirmation email, like #111.');
@@ -710,8 +732,12 @@ function process(rawText) {
     }
   }
 
-  /* --- Global handling: bare order number, then intents, then fallback --- */
-  if (/^#?\d{1,10}$/.test(text)) { fallbackStreak = 0; lookUpOrder(extractOrderNumber(text)); return; }
+  /* --- Global handling: bare order number(s), then intents, then fallback --- */
+  if (/^#?\d{1,10}([\s,&]+(and\s+)?#?\d{1,10})*$/.test(text)) {
+    fallbackStreak = 0;
+    lookUpOrders(extractOrderNumbers(text));
+    return;
+  }
   if (intent && runIntent(intent, text)) return;
   fallback();
 }
