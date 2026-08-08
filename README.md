@@ -68,6 +68,10 @@ Everything lives in [`index.html`](index.html) — plain HTML/CSS/JS, no librari
   to a live agent.
 - **Quick-reply chips + free text** — every step can be completed by tapping chips or
   by typing naturally; both go through the same pipeline.
+- **Message bursts** — if the user fires several messages in quick succession, the bot
+  waits for the burst to end and answers everything in one combined reply (e.g. a
+  return question plus two order numbers plus a shipping question → one response
+  covering all four).
 
 ## ✅ Submission checklist mapping
 

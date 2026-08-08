@@ -313,12 +313,16 @@ const INTENTS = {
     [/\bpackage\b/, 1],
   ],
   returns: [
-    [/\breturn(s|ing)?\b/, 3],
-    [/\brefund(s|ed)?\b/, 3],
-    [/\bexchange(s|d)?\b/, 3],
-    [/\bsend (it|this|them)? ?back\b/, 3],
-    [/\bmoney back\b/, 3],
+    [/\breturn(s|ing)?\b/, 4],
+    [/\brefund(s|ed)?\b/, 4],
+    [/\bexchange(s|d)?\b/, 4],
+    [/\bsend (it|this|them)? ?back\b/, 4],
+    [/\bmoney back\b/, 4],
     [/\b(wrong|damaged|broken|defective|doesn'?t fit|too (small|big|large))\b/, 2],
+  ],
+  cancel_order: [
+    [/\bcancel(l?ed|l?ing)?\b/, 4],
+    [/\bcall (it|the order) off\b/, 4],
   ],
   recommendation: [
     [/\brecommend(ation)?s?\b/, 3],
@@ -342,6 +346,9 @@ const INTENTS = {
   ],
   shipping_info: [
     [/\bshipping (options?|info|cost|time|speed|rates?)\b/, 4],
+    [/\bdo you (ship|deliver)\b/, 4],
+    [/\bhow much (is|for|does) (shipping|delivery)/, 4],
+    [/\b(cost|price) of (shipping|delivery)\b/, 4],
     [/\bhow (long|fast).*(ship|deliver|arrive)/, 4],
     [/\b(delivery|shipping) (time|options?)\b/, 4],
     [/\bexpedited?\b/, 3],
@@ -504,18 +511,29 @@ function lookUpOrder(num) {
   }
 }
 
+/* Combined status text for one or more order numbers (no follow-up prompt). */
+function orderRundown(nums) {
+  if (nums.length === 1) {
+    const n = nums[0];
+    return ORDERS[n] ? ORDERS[n].detail
+      : 'Hmm, I couldn’t find order #' + n + ' — that looks like an invalid order number. \u{1F9ED} Double-check the number on your confirmation email.';
+  }
+  const lines = nums.map(n =>
+    '• #' + n + ' — ' + (ORDERS[n] ? ORDERS[n].short : 'no match, that looks like an invalid order number \u{1F9ED}'));
+  let text = 'Here’s the latest on those orders:\n' + lines.join('\n');
+  if (nums.some(n => !ORDERS[n])) {
+    text += '\n\nFor any I couldn’t find, double-check the number on the confirmation email — or I can connect you with a live agent.';
+  }
+  if (nums.includes('333')) {
+    text += '\n\nAnd since #333 shows as delivered — just let me know if anything didn’t arrive in good shape.';
+  }
+  return text;
+}
+
 /* Several order numbers in one message get a combined status rundown. */
 function lookUpOrders(nums) {
   if (nums.length === 1) { lookUpOrder(nums[0]); return; }
-  const lines = nums.map(n =>
-    '• #' + n + ' — ' + (ORDERS[n] ? ORDERS[n].short : 'no match, that looks like an invalid order number \u{1F9ED}'));
-  say('Here’s the latest on those orders:\n' + lines.join('\n'));
-  if (nums.some(n => !ORDERS[n])) {
-    say('For any I couldn’t find, double-check the number on the confirmation email — or I can connect you with a live agent.');
-  }
-  if (nums.includes('333')) {
-    say('And since #333 shows as delivered — just let me know if anything didn’t arrive in good shape.');
-  }
+  say(orderRundown(nums));
   askAnythingElse();
 }
 
@@ -557,9 +575,9 @@ const RECO_RESULT = {
 
 function handleRecoQ1(text) {
   let choice = null;
-  if (/\bcamp/i.test(text)) choice = 'camping';
-  else if (/\bhik|trek|trail\b/i.test(text)) choice = 'hiking';
-  else if (/\bapparel|cloth|jacket|wear|coat\b/i.test(text)) choice = 'apparel';
+  if (/\bcamp|tent|sleeping bag|stove|campfire/i.test(text)) choice = 'camping';
+  else if (/\bhik|trek|trail|boots?\b|backpack|daypack/i.test(text)) choice = 'hiking';
+  else if (/\bapparel|cloth|jacket|wear|coat|fleece|rain|shirt|pants/i.test(text)) choice = 'apparel';
   if (!choice) return false;
   recoContext = choice;
   state = 'RECO_Q2';
@@ -646,6 +664,12 @@ function runIntent(intent, rawText) {
       return true;
     }
     case 'returns':        startReturns(); return true;
+    case 'cancel_order':
+      fallbackStreak = 0;
+      state = 'MAIN_MENU';
+      say('I’m not able to cancel orders myself — but a live agent can sort that out for you right away.');
+      showChips(['Talk to a live agent', 'Back to menu']);
+      return true;
     case 'recommendation': startRecommendation(); return true;
     case 'human_agent':    startLiveAgent(); return true;
     case 'shipping_info':  shareShippingInfo(); return true;
@@ -733,13 +757,55 @@ function process(rawText) {
   }
 
   /* --- Global handling: bare order number(s), then intents, then fallback --- */
-  if (/^#?\d{1,10}([\s,&]+(and\s+)?#?\d{1,10})*$/.test(text)) {
+  if (/^#?\d{1,10}([\s,&]+((and|or|\+)\s*)?#?\d{1,10})*$/.test(text)) {
     fallbackStreak = 0;
     lookUpOrders(extractOrderNumbers(text));
     return;
   }
   if (intent && runIntent(intent, text)) return;
   fallback();
+}
+
+/* ---------- Message bursts ---------- */
+/* If the user fires several messages in a row, wait for the burst to end and
+   answer everything in ONE reply instead of replying to each message. */
+
+let pendingMsgs = [];
+let burstTimer = null;
+const BURST_WINDOW_MS = 700;
+
+function handleBurst(msgs) {
+  const joined = msgs.join(' ').trim();
+  const intents = [];
+  for (const m of msgs) {
+    const i = detectIntent(m.toLowerCase());
+    if (i && !intents.includes(i)) intents.push(i);
+  }
+  const substantive = intents.filter(i =>
+    !['greeting', 'thanks', 'affirm', 'goodbye', 'main_menu'].includes(i));
+
+  /* One message, one topic, or live-agent mode: normal handling of the whole text. */
+  if (msgs.length === 1 || substantive.length <= 1 || state === 'LIVE_AGENT') {
+    process(joined);
+    return;
+  }
+
+  /* Several topics at once → compose a single combined answer. */
+  fallbackStreak = 0;
+  const nums = extractOrderNumbers(joined);
+  const parts = [];
+  if (nums.length && substantive.includes('order_tracking')) parts.push(orderRundown(nums));
+  if (substantive.includes('returns')) parts.push(RETURN_POLICY);
+  if (substantive.includes('shipping_info')) parts.push(SHIPPING_INFO);
+  if (parts.length) say(parts.join('\n\n'));
+
+  /* At most one interactive flow can follow the combined answer. */
+  if (substantive.includes('human_agent')) { startLiveAgent(); return; }
+  if (substantive.includes('cancel_order')) { runIntent('cancel_order', joined); return; }
+  if (substantive.includes('recommendation')) { startRecommendation(); return; }
+  if (!nums.length && substantive.includes('order_tracking')) { startOrderTracking(); return; }
+  if (parts.length) { askAnythingElse(); return; }
+  process(joined);
 }
 
 /* ---------- Wire up ---------- */
@@ -750,7 +816,13 @@ function submit(text) {
   clearChips();
   addUserMessage(trimmed);
   /* Chip labels carry emoji/arrows; strip anything that isn't text before routing. */
-  process(trimmed.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}↩⭐]/gu, '').trim());
+  pendingMsgs.push(trimmed.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}↩⭐]/gu, '').trim());
+  clearTimeout(burstTimer);
+  burstTimer = setTimeout(() => {
+    const msgs = pendingMsgs;
+    pendingMsgs = [];
+    handleBurst(msgs);
+  }, BURST_WINDOW_MS);
 }
 
 sendBtn.addEventListener('click', () => { submit(inputEl.value); inputEl.value = ''; inputEl.focus(); });
