@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>North Star Support Bot</title>
+<style>
+  :root {
+    --pine: #1f4d36;
+    --pine-dark: #163a28;
+    --pine-light: #2e6b4a;
+    --moss: #e8f0ea;
+    --snow: #f7f6f2;
+    --cloud: #ffffff;
+    --ink: #22302a;
+    --ink-soft: #5c6b62;
+    --amber: #d98e32;
+    --agent: #7a4b9e;
+    --agent-soft: #f3ecf9;
+    --radius: 16px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: linear-gradient(160deg, #dfe9e2 0%, #c6d8cb 55%, #b3cabb 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    color: var(--ink);
+  }
+  .chat-app {
+    width: 100%;
+    max-width: 440px;
+    height: min(720px, 92vh);
+    background: var(--snow);
+    border-radius: 22px;
+    box-shadow: 0 18px 50px rgba(20, 40, 30, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ---------- Header ---------- */
+  .chat-header {
+    background: var(--pine);
+    color: var(--cloud);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .chat-header .logo {
+    width: 42px;
+    height: 42px;
+    background: var(--pine-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .chat-header h1 { font-size: 1.02rem; font-weight: 600; line-height: 1.2; }
+  .chat-header .status {
+    font-size: 0.78rem;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #7fd99a;
+    display: inline-block;
+  }
+  .chat-app.agent-mode .chat-header { background: var(--agent); }
+  .chat-app.agent-mode .status-dot { background: #ffd166; }
+
+  /* ---------- Agent banner ---------- */
+  .agent-banner {
+    display: none;
+    background: var(--agent-soft);
+    color: var(--agent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 7px 12px;
+    border-bottom: 1px solid #e2d3f0;
+    flex-shrink: 0;
+  }
+  .chat-app.agent-mode .agent-banner { display: block; }
+
+  /* ---------- Messages ---------- */
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .msg {
+    max-width: 82%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 0.92rem;
+    line-height: 1.45;
+    animation: pop 0.22s ease;
+    white-space: pre-line;
+    overflow-wrap: break-word;
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .msg.bot {
+    background: var(--cloud);
+    border: 1px solid #e3e8e4;
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    box-shadow: 0 1px 2px rgba(20, 40, 30, 0.05);
+  }
+  .msg.agent {
+    background: var(--agent-soft);
+    border: 1px solid #e2d3f0;
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+  }
+  .msg.agent .sender { color: var(--agent); }
+  .msg.user {
+    background: var(--pine);
+    color: var(--cloud);
+    border-bottom-right-radius: 4px;
+    align-self: flex-end;
+  }
+  .msg .sender {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--pine-light);
+    margin-bottom: 3px;
+    letter-spacing: 0.02em;
+  }
+  .msg a { color: var(--pine-light); font-weight: 600; }
+  .msg.agent a { color: var(--agent); }
+
+  /* ---------- Typing indicator ---------- */
+  .typing {
+    align-self: flex-start;
+    background: var(--cloud);
+    border: 1px solid #e3e8e4;
+    border-radius: var(--radius);
+    border-bottom-left-radius: 4px;
+    padding: 12px 16px;
+    display: flex;
+    gap: 5px;
+  }
+  .typing span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #b8c4bc;
+    animation: blink 1.2s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+
+  /* ---------- Quick replies ---------- */
+  .chips {
+    padding: 4px 16px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .chip {
+    background: var(--moss);
+    color: var(--pine);
+    border: 1px solid #c9dbd0;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    animation: pop 0.25s ease;
+  }
+  .chip:hover { background: #d8e7dd; transform: translateY(-1px); }
+  .chat-app.agent-mode .chip { color: var(--agent); background: var(--agent-soft); border-color: #e2d3f0; }
+  .chat-app.agent-mode .chip:hover { background: #ebdcf7; }
+
+  /* ---------- Input ---------- */
+  .chat-input {
+    display: flex;
+    gap: 8px;
+    padding: 12px 14px 14px;
+    background: var(--cloud);
+    border-top: 1px solid #e3e8e4;
+    flex-shrink: 0;
+  }
+  .chat-input input {
+    flex: 1;
+    border: 1px solid #d5ded8;
+    border-radius: 999px;
+    padding: 11px 16px;
+    font-size: 0.92rem;
+    font-family: inherit;
+    outline: none;
+    background: var(--snow);
+    color: var(--ink);
+  }
+  .chat-input input:focus { border-color: var(--pine-light); }
+  .chat-input button {
+    background: var(--pine);
+    color: var(--cloud);
+    border: none;
+    border-radius: 50%;
+    width: 42px;
+    height: 42px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .chat-input button:hover { background: var(--pine-light); }
+  .chat-app.agent-mode .chat-input button { background: var(--agent); }
+
+  .chat-messages::-webkit-scrollbar { width: 6px; }
+  .chat-messages::-webkit-scrollbar-thumb { background: #c4d0c8; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="chat-app" id="app">
+  <header class="chat-header">
+    <div class="logo">
+      <!-- Compass / north-star mark -->
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2L12 2z" fill="#f7f6f2"/>
+        <circle cx="12" cy="12" r="2.2" fill="#d98e32"/>
+      </svg>
+    </div>
+    <div>
+      <h1 id="header-title">North Star Support Bot</h1>
+      <div class="status"><span class="status-dot"></span><span id="header-status">Online &middot; here to help you find your way</span></div>
+    </div>
+  </header>
+
+  <div class="agent-banner">&#9733; You are now connected to a Live Agent (simulated) &#9733;</div>
+
+  <main class="chat-messages" id="messages" aria-live="polite"></main>
+
+  <div class="chips" id="chips"></div>
+
+  <footer class="chat-input">
+    <input type="text" id="input" placeholder="Type a message&hellip;" autocomplete="off" aria-label="Message">
+    <button id="send" aria-label="Send message">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 11l18-8-8 18-2-8-8-2z" fill="currentColor"/></svg>
+    </button>
+  </footer>
+</div>
+
+<script>
+/* =========================================================================
+   North Star Support Bot
+   Rule-based customer support chatbot for a fictional outdoor gear store.
+   Intent recognition (keyword/regex scoring) + guided state-machine flows.
+   All business data comes from the provided project brief — nothing external.
+   ========================================================================= */
+
+/* ---------- Provided business data (used exactly as specified) ---------- */
+
+const ORDERS = {
+  '111': { status: 'Shipped', detail: 'Good news — order #111 has shipped and is arriving tomorrow! \u{1F69A}' },
+  '222': { status: 'Processing', detail: 'Order #222 is currently processing and ships in 24 hours. It’ll be on the trail to you soon!' },
+  '333': { status: 'Delivered', detail: 'Order #333 shows as delivered. \u{1F4E6}' },
+};
+
+const RETURN_POLICY =
+  'Here’s our return policy in a nutshell: \u{1F332}\n' +
+  '• 30-day returns from the delivery date\n' +
+  '• Items must be unused\n' +
+  '• Original packaging is required\n\n' +
+  'You can start a return here: northstargear.example/returns (demo link)';
+
+const SHIPPING_INFO =
+  'Our shipping options: \u{1F4EC}\n' +
+  '• Standard shipping: 3–5 business days\n' +
+  '• Expedited shipping: 1–2 business days';
+
+/* ---------- Intent recognition ---------- */
+/* Each intent has weighted patterns; the highest total score wins.
+   Phrase-level patterns score higher than single keywords so that e.g.
+   "where is my order" beats a stray product keyword. */
+
+const INTENTS = {
+  order_tracking: [
+    [/\bwhere('?s| is)? my (order|package|parcel|delivery|stuff)\b/, 3],
+    [/\btrack(ing)?\b/, 2],
+    [/\border (status|number)\b/, 3],
+    [/\bstatus of my (order|package|parcel)\b/, 3],
+    [/\bmy (order|package|parcel|shipment|delivery)\b/, 2],
+    [/\b(has|did) my order (ship|arrive)/, 3],
+    [/\bwhen (will|does) my (order|package|gear) (arrive|come|ship)/, 3],
+    [/\bcheck (on )?(my )?(an? )?order\b/, 3],
+    [/\bshipment\b/, 1],
+    [/\bpackage\b/, 1],
+  ],
+  returns: [
+    [/\breturn(s|ing)?\b/, 3],
+    [/\brefund(s|ed)?\b/, 3],
+    [/\bexchange(s|d)?\b/, 3],
+    [/\bsend (it|this|them)? ?back\b/, 3],
+    [/\bmoney back\b/, 3],
+    [/\b(wrong|damaged|broken|defective|doesn'?t fit|too (small|big|large))\b/, 2],
+  ],
+  recommendation: [
+    [/\brecommend(ation)?s?\b/, 3],
+    [/\bsuggest(ion)?s?\b/, 3],
+    [/\b(looking|shopping) for\b/, 3],
+    [/\bwhat (should|do) i (buy|get)\b/, 3],
+    [/\bhelp me (choose|pick|find)\b/, 3],
+    [/\b(need|want|buy(ing)?|get) (a|an|some|new)\b/, 2],
+    [/\b(gift|present)\b/, 2],
+    [/\b(tent|sleeping bag|jacket|boots?|backpack|pack|gear|apparel|clothing|coat|fleece|rain ?shell)\b/, 2],
+  ],
+  human_agent: [
+    [/\b(live|real|actual|human) (agent|person|chat|support|rep)\b/, 4],
+    [/\bagent\b/, 3],
+    [/\bhuman\b/, 3],
+    [/\b(talk|speak|chat) (to|with) (a |an |some)?(one|body|agent|human|person|rep)/, 4],
+    [/\brepresentative\b/, 3],
+    [/\bcustomer (service|support)\b/, 2],
+    [/\breal person\b/, 4],
+    [/\bescalate\b/, 3],
+  ],
+  shipping_info: [
+    [/\bshipping (options?|info|cost|time|speed|rates?)\b/, 4],
+    [/\bhow (long|fast).*(ship|deliver|arrive)/, 4],
+    [/\b(delivery|shipping) (time|options?)\b/, 4],
+    [/\bexpedited?\b/, 3],
+    [/\bhow long does (shipping|delivery) take\b/, 4],
+    [/\bshipping\b/, 1],
+  ],
+  main_menu: [
+    [/\b(main )?menu\b/, 4],
+    [/\bstart over\b/, 4],
+    [/\brestart\b/, 3],
+    [/\bgo back\b/, 3],
+    [/\bhome\b/, 2],
+    [/\b(options|help)\b/, 2],
+  ],
+  greeting: [
+    [/^(hi|hiya|hello|hey|howdy|yo|good (morning|afternoon|evening))\b/, 3],
+  ],
+  thanks: [
+    [/\b(thanks?|thank you|thx|appreciate)\b/, 3],
+  ],
+  goodbye: [
+    [/\b(bye|goodbye|see ya|that('?s| is) all|nothing else|i'?m (all )?(good|done|set))\b/, 3],
+    [/^(no|nope|nah|no thanks|no thank you)[.!]?$/, 2],
+  ],
+  affirm: [
+    [/^(yes|yeah|yep|yup|sure|ok(ay)?|sounds good|please|y)[.!]?$/, 3],
+  ],
+};
+
+function detectIntent(text) {
+  let best = null, bestScore = 0;
+  for (const [intent, patterns] of Object.entries(INTENTS)) {
+    let score = 0;
+    for (const [regex, weight] of patterns) {
+      if (regex.test(text)) score += weight;
+    }
+    if (score > bestScore) { bestScore = score; best = intent; }
+  }
+  return bestScore >= 2 ? best : null;
+}
+
+/* Pull an order number out of free text, e.g. "it's #222" or "order 111". */
+function extractOrderNumber(text) {
+  const m = text.match(/#?(\d{1,10})\b/);
+  return m ? m[1] : null;
+}
+
+/* ---------- Conversation state ---------- */
+
+let state = 'MAIN_MENU';   // current position in the guided flow
+let fallbackStreak = 0;     // consecutive not-understood inputs
+let recoContext = null;     // first answer in the recommendation flow
+
+const MENU_CHIPS = ['\u{1F4E6} Track my order', '\u{21A9} Returns & exchanges', '\u{1F3D5} Product recommendations', '\u{1F9D1} Talk to a live agent'];
+
+/* ---------- DOM helpers ---------- */
+
+const app = document.getElementById('app');
+const messagesEl = document.getElementById('messages');
+const chipsEl = document.getElementById('chips');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const headerStatus = document.getElementById('header-status');
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function linkify(safeText) {
+  return safeText.replace(/\bnorthstargear\.example\/returns\b/g,
+    '<a href="#" onclick="return false;">northstargear.example/returns</a>');
+}
+
+function addUserMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'msg user';
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  scrollDown();
+}
+
+let queue = Promise.resolve();
+
+/* Bot/agent messages show a brief typing indicator, then render in order. */
+function say(text, { from = 'bot', delay = 650 } = {}) {
+  queue = queue.then(() => new Promise(resolve => {
+    const typing = document.createElement('div');
+    typing.className = 'typing';
+    typing.innerHTML = '<span></span><span></span><span></span>';
+    messagesEl.appendChild(typing);
+    scrollDown();
+    setTimeout(() => {
+      typing.remove();
+      const div = document.createElement('div');
+      div.className = 'msg ' + (from === 'agent' ? 'agent' : 'bot');
+      const sender = from === 'agent' ? 'Riley • Live Agent (simulated)' : 'North Star Support Bot';
+      div.innerHTML = '<span class="sender">' + sender + '</span>' + linkify(escapeHtml(text));
+      messagesEl.appendChild(div);
+      scrollDown();
+      resolve();
+    }, delay);
+  }));
+  return queue;
+}
+
+function showChips(labels) {
+  queue = queue.then(() => {
+    chipsEl.innerHTML = '';
+    for (const label of labels) {
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.textContent = label;
+      btn.addEventListener('click', () => submit(label));
+      chipsEl.appendChild(btn);
+    }
+    scrollDown();
+  });
+}
+
+function clearChips() { chipsEl.innerHTML = ''; }
+
+function scrollDown() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+/* ---------- Flows ---------- */
+
+function showMainMenu(intro) {
+  state = 'MAIN_MENU';
+  if (intro) say(intro);
+  say('Here’s what I can help with — pick an option or just type your question:');
+  showChips(MENU_CHIPS);
+}
+
+function startOrderTracking() {
+  state = 'ORDER_AWAIT_NUMBER';
+  fallbackStreak = 0;
+  say('Happy to check on that! \u{1F50E} What’s your order number? (e.g. #111)');
+  showChips(['#111', '#222', '#333', 'Back to menu']);
+}
+
+function lookUpOrder(num) {
+  const order = ORDERS[num];
+  if (!order) {
+    say('Hmm, I couldn’t find order #' + num + ' — that looks like an invalid order number. \u{1F9ED}');
+    say('Double-check the number on your confirmation email and try again, or I can connect you with a live agent.');
+    state = 'ORDER_AWAIT_NUMBER';
+    showChips(['Try another number', 'Talk to a live agent', 'Back to menu']);
+    return;
+  }
+  say(order.detail);
+  if (num === '333') {
+    state = 'ORDER_333_FOLLOWUP';
+    say('Since it’s been delivered — did everything arrive in good shape?');
+    showChips(['All good \u{1F44D}', 'There’s a problem']);
+  } else {
+    askAnythingElse();
+  }
+}
+
+function startReturns() {
+  state = 'RETURNS';
+  fallbackStreak = 0;
+  say(RETURN_POLICY);
+  showChips(['Track my order', 'Talk to a live agent', 'Back to menu']);
+}
+
+function shareShippingInfo() {
+  fallbackStreak = 0;
+  say(SHIPPING_INFO);
+  askAnythingElse();
+}
+
+function startRecommendation() {
+  state = 'RECO_Q1';
+  fallbackStreak = 0;
+  recoContext = null;
+  say('Fun — let’s find you the right gear! \u{1F3D5} What kind of adventure are you gearing up for?');
+  showChips(['Camping', 'Hiking', 'Outdoor apparel']);
+}
+
+const RECO_Q2 = {
+  camping: { question: 'Nice — will you be camping in mild weather, or braving colder nights?', chips: ['Mild weather', 'Cold weather'] },
+  hiking:  { question: 'Great choice! Are you doing day hikes or multi-day treks?', chips: ['Day hikes', 'Multi-day treks'] },
+  apparel: { question: 'Got it! Is your priority staying warm or staying dry?', chips: ['Staying warm', 'Staying dry'] },
+};
+
+const RECO_RESULT = {
+  'camping|mild': 'I’d point you to our 3-season tents and lightweight sleeping bags — perfect for mild-weather basecamps. ⛺',
+  'camping|cold': 'For cold nights, check out our 4-season tents and insulated sleeping bags — built to keep you cozy below freezing. \u{1F3D4}',
+  'hiking|day':   'For day hikes, I’d recommend our hiking boots and daypacks — light, comfy, and trail-ready. \u{1F97E}',
+  'hiking|multi': 'For multi-day treks, look at our backpacking packs and trekking gear — made to carry everything you need. \u{1F392}',
+  'apparel|warm': 'To stay warm, our insulated jackets and fleece layers are the way to go. \u{1F9E5}',
+  'apparel|dry':  'To stay dry, check out our rain shells — waterproof, breathable, and packable. \u{1F327}',
+};
+
+function handleRecoQ1(text) {
+  let choice = null;
+  if (/\bcamp/i.test(text)) choice = 'camping';
+  else if (/\bhik|trek|trail\b/i.test(text)) choice = 'hiking';
+  else if (/\bapparel|cloth|jacket|wear|coat\b/i.test(text)) choice = 'apparel';
+  if (!choice) return false;
+  recoContext = choice;
+  state = 'RECO_Q2';
+  const q = RECO_Q2[choice];
+  say(q.question);
+  showChips(q.chips);
+  return true;
+}
+
+function handleRecoQ2(text) {
+  let key = null;
+  if (recoContext === 'camping') {
+    if (/mild|warm|summer|spring|fair/i.test(text)) key = 'camping|mild';
+    else if (/cold|winter|freez|snow|chill/i.test(text)) key = 'camping|cold';
+  } else if (recoContext === 'hiking') {
+    if (/day/i.test(text)) key = 'hiking|day';
+    else if (/multi|trek|overnight|long|backpack/i.test(text)) key = 'hiking|multi';
+  } else if (recoContext === 'apparel') {
+    if (/warm|cold|insulat|winter/i.test(text)) key = 'apparel|warm';
+    else if (/dry|rain|wet|water/i.test(text)) key = 'apparel|dry';
+  }
+  if (!key) return false;
+  say(RECO_RESULT[key]);
+  askAnythingElse();
+  return true;
+}
+
+function startLiveAgent() {
+  state = 'LIVE_AGENT';
+  fallbackStreak = 0;
+  say('No problem — transferring you to a live agent now. Hang tight! \u{1F517}');
+  queue = queue.then(() => {
+    app.classList.add('agent-mode');
+    headerStatus.textContent = 'Live Agent (simulated)';
+  });
+  say('Hi there, this is Riley from North Star support! \u{1F44B} I’ve got your chat history in front of me — how can I help?', { from: 'agent', delay: 1100 });
+  showChips(['Return to main menu']);
+}
+
+function endLiveAgent() {
+  say('Thanks for chatting with North Star support — transferring you back to our assistant. Take care out there! \u{1F332}', { from: 'agent' });
+  queue = queue.then(() => {
+    app.classList.remove('agent-mode');
+    headerStatus.textContent = 'Online · here to help you find your way';
+  });
+  showMainMenu('Welcome back! \u{2B50}');
+}
+
+function askAnythingElse() {
+  state = 'ANYTHING_ELSE';
+  say('Anything else I can help you with?');
+  showChips(['Track my order', 'Returns & exchanges', 'Product recommendations', 'Talk to a live agent', 'No, that’s all']);
+}
+
+function sayGoodbye() {
+  state = 'MAIN_MENU';
+  say('Happy trails! \u{1F3D5} If you need anything else, I’m always here. ⭐');
+  showChips(MENU_CHIPS);
+}
+
+/* ---------- Fallback ---------- */
+
+function fallback() {
+  fallbackStreak++;
+  if (fallbackStreak >= 2) {
+    say('Sorry — I’m still not following. \u{1F615} Let me get you to someone who can help, or pick one of these:');
+    state = 'MAIN_MENU';
+    showChips(['\u{1F9D1} Talk to a live agent', ...MENU_CHIPS.slice(0, 3)]);
+  } else {
+    say('Hmm, I didn’t quite catch that. \u{1F9ED} I can help with any of these:');
+    state = 'MAIN_MENU';
+    showChips(MENU_CHIPS);
+  }
+}
+
+/* ---------- Input routing ---------- */
+
+function runIntent(intent, rawText) {
+  switch (intent) {
+    case 'order_tracking': {
+      const num = extractOrderNumber(rawText);
+      if (num) { fallbackStreak = 0; lookUpOrder(num); }
+      else startOrderTracking();
+      return true;
+    }
+    case 'returns':        startReturns(); return true;
+    case 'recommendation': startRecommendation(); return true;
+    case 'human_agent':    startLiveAgent(); return true;
+    case 'shipping_info':  shareShippingInfo(); return true;
+    case 'main_menu':      fallbackStreak = 0; clearChips(); showMainMenu(); return true;
+    case 'greeting':
+      fallbackStreak = 0;
+      showMainMenu('Hey there! Welcome to North Star Outfitters. ⭐');
+      return true;
+    case 'thanks':
+      fallbackStreak = 0;
+      say('You’re so welcome! \u{1F60A}');
+      askAnythingElse();
+      return true;
+    case 'goodbye':
+      fallbackStreak = 0;
+      sayGoodbye();
+      return true;
+    default: return false;
+  }
+}
+
+function process(rawText) {
+  const text = rawText.toLowerCase().trim();
+  const intent = detectIntent(text);
+
+  /* --- Simulated Live Agent state: agent replies until user returns to menu --- */
+  if (state === 'LIVE_AGENT') {
+    if (intent === 'main_menu' || /return to main menu/i.test(text) || intent === 'goodbye') {
+      endLiveAgent();
+    } else {
+      say('Thanks for the details! In a real conversation a support teammate would take it from here — this is a simulated handoff for the demo. Anything else you’d like to pass along?', { from: 'agent', delay: 900 });
+      showChips(['Return to main menu']);
+    }
+    return;
+  }
+
+  /* --- State-specific handling first (guided flow) --- */
+  switch (state) {
+    case 'ORDER_AWAIT_NUMBER': {
+      const num = extractOrderNumber(text);
+      if (num) { fallbackStreak = 0; lookUpOrder(num); return; }
+      if (/try another/i.test(text)) { startOrderTracking(); return; }
+      if (intent && runIntent(intent, text)) return;
+      say('I just need the order number — it’s the digits on your confirmation email, like #111.');
+      showChips(['#111', '#222', '#333', 'Back to menu']);
+      return;
+    }
+    case 'ORDER_333_FOLLOWUP': {
+      if (intent === 'affirm' || /all good|good|great|fine|perfect|yes/i.test(text)) {
+        fallbackStreak = 0;
+        say('Love to hear it! \u{1F389} Enjoy the new gear.');
+        askAnythingElse();
+        return;
+      }
+      if (/problem|issue|damag|broken|wrong|missing|no\b/i.test(text) || intent === 'returns') {
+        fallbackStreak = 0;
+        say('Sorry to hear that! \u{1F614} I can walk you through a return or exchange, or connect you with a live agent.');
+        showChips(['Returns & exchanges', 'Talk to a live agent', 'Back to menu']);
+        state = 'MAIN_MENU';
+        return;
+      }
+      if (intent && runIntent(intent, text)) return;
+      break;
+    }
+    case 'RECO_Q1': {
+      if (handleRecoQ1(text)) { fallbackStreak = 0; return; }
+      if (intent && intent !== 'recommendation' && runIntent(intent, text)) return;
+      say('No wrong answers here! Are you thinking camping, hiking, or outdoor apparel?');
+      showChips(['Camping', 'Hiking', 'Outdoor apparel']);
+      return;
+    }
+    case 'RECO_Q2': {
+      if (handleRecoQ2(text)) { fallbackStreak = 0; return; }
+      if (intent && intent !== 'recommendation' && runIntent(intent, text)) return;
+      const q = RECO_Q2[recoContext];
+      say('Just pick whichever fits best:');
+      showChips(q.chips);
+      return;
+    }
+    case 'ANYTHING_ELSE': {
+      if (intent === 'affirm') { showMainMenu(); return; }
+      if (intent === 'goodbye' || /^no/i.test(text)) { sayGoodbye(); return; }
+      break; // fall through to global intent handling
+    }
+  }
+
+  /* --- Global handling: bare order number, then intents, then fallback --- */
+  if (/^#?\d{1,10}$/.test(text)) { fallbackStreak = 0; lookUpOrder(extractOrderNumber(text)); return; }
+  if (intent && runIntent(intent, text)) return;
+  fallback();
+}
+
+/* ---------- Wire up ---------- */
+
+function submit(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  clearChips();
+  addUserMessage(trimmed);
+  /* Chip labels carry emoji/arrows; strip anything that isn't text before routing. */
+  process(trimmed.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}↩⭐]/gu, '').trim());
+}
+
+sendBtn.addEventListener('click', () => { submit(inputEl.value); inputEl.value = ''; inputEl.focus(); });
+inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') { submit(inputEl.value); inputEl.value = ''; } });
+
+/* ---------- Kick off ---------- */
+
+say('Hey there, adventurer! \u{1F44B} I’m the North Star Support Bot — your guide for orders, returns, and gear picks at North Star Outfitters. ⭐');
+showMainMenu();
+inputEl.focus();
+</script>
+</body>
+</html>
