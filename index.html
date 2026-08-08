@@ -474,8 +474,8 @@ function showMainMenu(intro) {
 function startOrderTracking() {
   state = 'ORDER_AWAIT_NUMBER';
   fallbackStreak = 0;
-  say('Happy to check on that! \u{1F50E} What’s your order number? (e.g. #111)');
-  showChips(['#111', '#222', '#333', 'Back to menu']);
+  say('Happy to check on that! \u{1F50E} What’s your order number? You’ll find it on your confirmation email (e.g. #111).');
+  showChips(['Back to menu']);
 }
 
 function lookUpOrder(num) {
@@ -668,7 +668,7 @@ function process(rawText) {
       if (/try another/i.test(text)) { startOrderTracking(); return; }
       if (intent && runIntent(intent, text)) return;
       say('I just need the order number — it’s the digits on your confirmation email, like #111.');
-      showChips(['#111', '#222', '#333', 'Back to menu']);
+      showChips(['Back to menu']);
       return;
     }
     case 'ORDER_333_FOLLOWUP': {
